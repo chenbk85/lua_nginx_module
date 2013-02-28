@@ -102,6 +102,12 @@ if user == nil then
       ngx.log(ngx.STDERR, "Invalid Auth Cookie!!")
       return ngx.redirect(ngx.var.redirect_url)
    end
+
+   if string.match(res.body, "auth.oauth_invalid_access_token") then
+      ngx.log(ngx.STDERR, "Invalid OAuth Token!!")
+      return ngx.redirect(ngx.var.redirect_url)
+   end
+
    debug_log(res.body)
    cache:set(cache_key, res.body, 5)
    user = res.body
