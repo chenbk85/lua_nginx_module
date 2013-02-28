@@ -37,6 +37,7 @@ function debug_log(str)
     end
 end
 
+
 -- 認証用 Cookie が存在するか？
 local headers = ngx.req.get_headers()
 
@@ -48,36 +49,61 @@ if ngx.var.debug == "true" then
     ngx.log(ngx.STDERR, h_str)
 end
 
-if headers["Cookie"] == nil then headers["Cookie"]="" end
-if headers["Authorization"] == nil then headers["Authorization"]="" end
-
--- 認証チケットの取り出し
-local auth_ticket = string.match(headers["Cookie"], ngx.var.auth_cookie.."=(.+)")
-debug_log("AuthTicket:" .. tostring(auth_ticket))
-
--- OAuthトークンの取り出し
-local oauth_token = string.match(headers["Authorization"], "OAuth (.+)")
-debug_log("OAuthToken:" .. tostring(oauth_token))
-
 -- 認証チケットがなく,OAuthトークンもなければ,ログインURLへリダイレクト
-if ((auth_ticket == nil) and (oauth_token == nil)) then
+if ((headers["Cookie"] == nil) and (headers["Authorization"] == nil)) then
    ngx.log(ngx.STDERR, "No Auth Cookie and OAuth Token!!")
    return ngx.redirect(ngx.var.redirect_url)
 end
 
--- キャッシュのチェック ($auth_cache_time秒)
-local cookies = ngx.shared.cookies
-cookies:flush_expired(0)
-local user = cookies:get(auth_ticket)
+local user = nil
+local cache = nil
+local cache_key = nil
+-- 認証チケットがある場合(認可チケットがある場合も認証チケットを優先)
+if headers["Cookie"] then
 
+   -- 認証チケットの取り出し
+   local auth_ticket = string.match(headers["Cookie"], ngx.var.auth_cookie.."=(.+)")
+   debug_log("AuthTicket:" .. tostring(auth_ticket))
+
+   -- キャッシュのチェック ($auth_cache_time秒)
+   if auth_ticket then
+      cache = ngx.shared.cookies
+      cache:flush_expired(0)
+      user = cache:get(auth_ticket)
+      cache_key = auth_ticket
+   else
+      ngx.log(ngx.STDERR, "Invalid Request")
+      return ngx.redirect(ngx.var.redirect_url)
+   end
+
+else
+-- OAuthトークンがしかない場合
+
+   -- OAuthトークンの取り出し
+   local oauth_token = string.match(headers["Authorization"], "OAuth (.+)")
+   debug_log("OAuthToken:" .. tostring(oauth_token))
+
+   -- キャッシュのチェック ($auth_cache_time秒)
+   if oauth_token then
+      cache = ngx.shared.tokens
+      cache:flush_expired(0)
+      user = cache:get(oauth_token)
+      cache_key = oauth_token
+   else
+      ngx.log(ngx.STDERR, "Invalid Request")
+      return ngx.redirect(ngx.var.redirect_url)
+   end
+end
+
+-- 権限情報の取得
 if user == nil then
    local res = ngx.location.capture("/auth/policy/me")
    if string.match(res.body, "invalid_cookie_ticket") then
-     ngx.log(ngx.STDERR, "Invalid Auth Cookie!!")
-     return ngx.redirect(ngx.var.redirect_url)
+      ngx.log(ngx.STDERR, "Invalid Auth Cookie!!")
+      return ngx.redirect(ngx.var.redirect_url)
    end
    debug_log(res.body)
-   cookies:set(auth_ticket, res.body, 5)
+   cache:set(cache_key, res.body, 5)
    user = res.body
 else
    debug_log("** cache hit **: " .. user)
