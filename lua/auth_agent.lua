@@ -58,6 +58,17 @@ end
 local user = nil
 local cache = nil
 local cache_key = nil
+
+local request_uri = ngx.var.uri
+-- ngx.var.req_uri = ngx.var.uri
+debug_log("RequestUri:" .. tostring(request_uri))
+-- debug_log("ngx.var.req_uri:" .. tostring(ngx.var.req_uri))
+
+local request_method = ngx.var.request_method
+-- ngx.var.req_method = ngx.var.request_method
+debug_log("RequestMethod:" .. tostring(request_method))
+-- debug_log("ngx.var.req_method:" .. tostring(ngx.var.req_method))
+
 -- 認証チケットがある場合(認可チケットがある場合も認証チケットを優先)
 if headers["Cookie"] then
 
@@ -67,10 +78,12 @@ if headers["Cookie"] then
 
    -- キャッシュのチェック ($auth_cache_time秒)
    if auth_ticket then
+      cache_key = base64.enc(auth_ticket..","..request_uri..","..request_method)
+      debug_log("CacheKey:" .. tostring(cache_key))
+
       cache = ngx.shared.cookies
       cache:flush_expired(0)
-      user = cache:get(auth_ticket)
-      cache_key = auth_ticket
+      user = cache:get(cache_key)
    else
       ngx.log(ngx.STDERR, "Invalid Request")
       return ngx.redirect(ngx.var.redirect_url)
@@ -85,19 +98,21 @@ else
 
    -- キャッシュのチェック ($auth_cache_time秒)
    if oauth_token then
+      cache_key = base64.enc(oauth_token..","..request_uri..","..request_method)
       cache = ngx.shared.tokens
       cache:flush_expired(0)
-      user = cache:get(oauth_token)
-      cache_key = oauth_token
+      user = cache:get(cache_key)
    else
       ngx.log(ngx.STDERR, "Invalid Request")
       return ngx.redirect(ngx.var.redirect_url)
    end
 end
 
+
+
 -- 権限情報の取得
 if user == nil then
-   local res = ngx.location.capture("/auth/policy/me")
+   local res = ngx.location.capture("/auth/policy/agent")
    if string.match(res.body, "invalid_cookie_ticket") then
       ngx.log(ngx.STDERR, "Invalid Auth Cookie!!")
       return ngx.redirect(ngx.var.redirect_url)
