@@ -5,38 +5,15 @@ local x_headers = {organization_id='X-Organization-Id', user_id='X-User-Id',
 ----------------------------
 -- ユーティリティ関数
 ----------------------------
-function split(str, delim)
-    if string.find(str, delim) == nil then
-        return { str }
-    end
-
-    local result = {}
-    local pat = "(.-)" .. delim .. "()"
-    local lastPos
-    for part, pos in string.gfind(str, pat) do
-        table.insert(result, part)
-        lastPos = pos
-    end
-    table.insert(result, string.sub(str, lastPos))
-    return result    
-end
-
-function add_header(key, str)
-    local header = x_headers[key]
-    if string.sub(str, 1, 1) == '"' then
-        str = string.sub(str, 2, string.len(str)-1)
-    end
-    debug_log(header .. ": " .. str)
-    ngx.var[key] = str
-end
-
-
 function debug_log(str)
     if ngx.var.debug == "true" then
         ngx.log(ngx.STDERR, str)
     end
 end
 
+----------------------------
+-- 認証・認可チェック
+----------------------------
 
 -- 認証用 Cookie が存在するか？
 local headers = ngx.req.get_headers()
@@ -134,27 +111,14 @@ end
 local response_json = Json.Decode(user)
 
 -- 権限(scope)チェック
-local scope_json = response_json["scope"]
-local target_json = scope_json["target"]
-
-debug_log("url_path: "..ngx.var.uri)
-debug_log("method: "..ngx.var.request_method)
+local decision = response_json["result"]["decision"]
+debug_log("decision:" .. decision)
 
 local matched_flag = false
-for idx, v in pairs(target_json) do
-    debug_log("uri: "..ngx.var.uri)
-    debug_log("service_uri: "..v["service_uri"])
-    if string.match(ngx.var.uri,v["service_uri"]) then
-       debug_log("matched!")
-       matched_flag = true
-       break
-    end
-end
 
-
--- マッチしなければリダイレクション
-if matched_flag==false then
-       debug_log("mis_match! redirect to login_page")
+-- decisionがpermitでなければリダイレクション
+if decision ~= "permit" then
+       debug_log("access denied. redirect to login_page")
        return ngx.redirect(ngx.var.redirect_url)
 end
 
