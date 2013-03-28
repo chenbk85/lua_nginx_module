@@ -32,7 +32,7 @@ if ((headers["Cookie"] == nil) and (headers["Authorization"] == nil)) then
    return ngx.redirect(ngx.var.redirect_url)
 end
 
-local user = nil
+local res_context = nil
 local cache = nil
 local cache_key = nil
 
@@ -60,14 +60,14 @@ if headers["Cookie"] then
 
       cache = ngx.shared.cookies
       cache:flush_expired(0)
-      user = cache:get(cache_key)
+      res_context = cache:get(cache_key)
    else
       ngx.log(ngx.STDERR, "Invalid Request")
       return ngx.redirect(ngx.var.redirect_url)
    end
 
 else
--- OAuthトークンがしかない場合
+-- OAuthトークンしかない場合
 
    -- OAuthトークンの取り出し
    local oauth_token = string.match(headers["Authorization"], "OAuth (.+)")
@@ -78,7 +78,7 @@ else
       cache_key = base64.enc(oauth_token..","..request_uri..","..request_method)
       cache = ngx.shared.tokens
       cache:flush_expired(0)
-      user = cache:get(cache_key)
+      res_context = cache:get(cache_key)
    else
       ngx.log(ngx.STDERR, "Invalid Request")
       return ngx.redirect(ngx.var.redirect_url)
@@ -86,10 +86,11 @@ else
 end
 
 
-
 -- 権限情報の取得
-if user == nil then
-   local res = ngx.location.capture("/auth/policy/agent")
+if res_context == nil then
+   ngx.log(ngx.STDERR, "[auth_agent][uri]:" .. ngx.var.uri)
+   ngx.log(ngx.STDERR, "[auth_agent][method]:" .. ngx.var.request_method)
+   local res = ngx.location.capture("/auth/policy/agent",{ vars = { x_req_uri = ngx.var.uri, x_req_method = ngx.var.request_method }} )
    if string.match(res.body, "invalid_cookie_ticket") then
       ngx.log(ngx.STDERR, "Invalid Auth Cookie!!")
       return ngx.redirect(ngx.var.redirect_url)
@@ -101,14 +102,14 @@ if user == nil then
    end
 
    debug_log(res.body)
-   cache:set(cache_key, res.body, 5)
-   user = res.body
+   cache:set(cache_key, res.body, 0)
+   res_context = res.body
 else
-   debug_log("** cache hit **: " .. user)
+   debug_log("** cache hit **: " .. res_context)
 end
 
 -- JSONパーサー
-local response_json = Json.Decode(user)
+local response_json = Json.Decode(res_context)
 
 -- 権限(scope)チェック
 local decision = response_json["result"]["decision"]
