@@ -58,7 +58,7 @@ if headers["Cookie"] then
       cache_key = ngx.encode_base64(auth_ticket..","..request_uri..","..request_method)
       debug_log("CacheKey:" .. tostring(cache_key))
 
-      cache = ngx.shared.cookies
+      cache = ngx.shared.auth_cache
       cache:flush_expired(0)
       res_context = cache:get(cache_key)
    else
@@ -76,7 +76,7 @@ else
    -- キャッシュのチェック ($auth_cache_time秒)
    if oauth_token then
       cache_key = ngx.encode_base64(oauth_token..","..request_uri..","..request_method)
-      cache = ngx.shared.tokens
+      cache = ngx.shared.auth_cache
       cache:flush_expired(0)
       res_context = cache:get(cache_key)
    else
@@ -102,7 +102,7 @@ if res_context == nil then
    end
 
    debug_log(res.body)
-   cache:set(cache_key, res.body, 0)
+   cache:set(cache_key, res.body, ngx.var.auth_cache_time)
    res_context = res.body
 else
    debug_log("** cache hit **: " .. res_context)
