@@ -55,7 +55,7 @@ if headers["Cookie"] then
 
    -- キャッシュのチェック ($auth_cache_time秒)
    if auth_ticket then
-      cache_key = base64.enc(auth_ticket..","..request_uri..","..request_method)
+      cache_key = ngx.encode_base64(auth_ticket..","..request_uri..","..request_method)
       debug_log("CacheKey:" .. tostring(cache_key))
 
       cache = ngx.shared.cookies
@@ -75,7 +75,7 @@ else
 
    -- キャッシュのチェック ($auth_cache_time秒)
    if oauth_token then
-      cache_key = base64.enc(oauth_token..","..request_uri..","..request_method)
+      cache_key = ngx.encode_base64(oauth_token..","..request_uri..","..request_method)
       cache = ngx.shared.tokens
       cache:flush_expired(0)
       res_context = cache:get(cache_key)
